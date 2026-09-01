@@ -2,6 +2,7 @@ import usermodel from "../models/user.model.js";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import {ENV} from "../lib/env.js"
+import sessionModel from "../models/session.model.js";
 
 export const registerUser = async(req,res)=>{
       const {username,email,password}=req.body;
@@ -14,17 +15,34 @@ export const registerUser = async(req,res)=>{
 
       const hashedPassword = crypto.createHash("sha256").update(password).digest("hex");
 
-      const newUser = await new usermodel({
+      const newUser = await usermodel.create({
         username,
         email,
         password:hashedPassword
       });
 
-      await newUser.save();
 
-    const accessToken = jwt.sign({id:newUser._id},ENV.JWT_SECRET,{expiresIn:"15m"});
+      const refreshToken = jwt.sign({id:newUser._id},ENV.JWT_SECRET,{expiresIn:"7d"});
 
-    const refreshToken = jwt.sign({id:newUser._id},ENV.JWT_SECRET,{expiresIn:"7d"});
+      const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+
+      const session = await sessionModel.create({
+        userId:newUser.id,
+        refreshTokenHash,
+        ip:req.ip,
+        userAgent:req.headers["user-agent"]
+      })
+
+
+
+    const accessToken = jwt.sign(
+      {id:newUser._id,
+        sessionId:session._id
+      },
+      ENV.JWT_SECRET,
+      {expiresIn:"15m"});
+
+    
 
    res.cookie("refreshToken",refreshToken,{
     httpOnly:true,
@@ -38,6 +56,9 @@ export const registerUser = async(req,res)=>{
     }
     )
 }
+
+
+// Get-me
 
 export const getMe = async(req,res)=>{
   const token = req.headers.authorization?.split(" ")[1];
@@ -56,6 +77,10 @@ export const getMe = async(req,res)=>{
 
 }
 
+
+// refresh token creation
+
+
 export const refreshToken = async(req,res)=> {
 
   const refreshToken = req.cookies.refreshToken;
@@ -66,9 +91,15 @@ export const refreshToken = async(req,res)=> {
 
   const decoded = jwt.verify(refreshToken, ENV.JWT_SECRET);
 
-  const accessToken = jwt.sign({id:decoded.id},ENV.JWT_SECRET,{expiresIn:"15m"});
+  const accessToken = jwt.sign(
+    {id:decoded.id},
+    ENV.JWT_SECRET,
+    {expiresIn:"15m"});
 
-  const newRefreshToken = jwt.sign({id:decoded.id},ENV.JWT_SECRET,{expiresIn:"7d"});
+  const newRefreshToken = jwt.sign(
+    {id:decoded.id},
+    ENV.JWT_SECRET,
+    {expiresIn:"7d"});
 
   res.cookie("refreshToken", newRefreshToken,{
     httpOnly:true,
@@ -78,5 +109,18 @@ export const refreshToken = async(req,res)=> {
   });
 
   res.status(200).json({message:"Access token refreshed sucessfully",accessToken});
+
+}
+
+ export const logout = aysnc(req,res)=>{ 
+
+  const refreshToken = req.cookies.refreshToken;
+
+  if(!refreshToken){
+    return res.status(400).json({message:"refresh token not found"})
+  }
+
+
+  
 
 }
