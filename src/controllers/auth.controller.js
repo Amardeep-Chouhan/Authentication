@@ -80,6 +80,39 @@ export const login = async (req, res) => {
 
     const isPasswordValid = hashedPassword === user.password;
 
+    if (!isPasswordValid) {
+        return res.status(401).json({
+            message: "Invalid email or password"
+        })
+    }
+
+    const refreshToken = jwt.sign({
+        id: user._id
+    }, config.JWT_SECRET,
+        {
+            expiresIn: "7d"
+        }
+    )
+
+    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+
+    const session = await sessionModel.create({
+        user: user._id,
+        refreshTokenHash,
+        ip: req.ip,
+        userAgent: req.headers[ "user-agent" ]
+    })
+
+    const accessToken = jwt.sign({
+        id: user._id,
+        sessionId: session._id
+    }, config.JWT_SECRET,
+        {
+            expiresIn: "15m"
+        }
+    )
+
+   
 }
 
 // Get-me -- details of user
