@@ -62,7 +62,7 @@ export const registerUser = async(req,res)=>{
 export const login = async (req, res) => {
     const { email, password } = req.body;
 
-    const user = await userModel.findOne({ email })
+    const user = await usermodel.findOne({ email })
 
     if (!user) {
         return res.status(401).json({
@@ -70,11 +70,6 @@ export const login = async (req, res) => {
         })
     }
 
-    if (!user.verified) {
-        return res.status(401).json({
-            message: "Email not verified"
-        })
-    }
 
     const hashedPassword = crypto.createHash("sha256").update(password).digest("hex");
 
@@ -88,7 +83,7 @@ export const login = async (req, res) => {
 
     const refreshToken = jwt.sign({
         id: user._id
-    }, config.JWT_SECRET,
+    }, ENV.JWT_SECRET,
         {
             expiresIn: "7d"
         }
@@ -97,7 +92,7 @@ export const login = async (req, res) => {
     const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
 
     const session = await sessionModel.create({
-        user: user._id,
+        userId: user._id,
         refreshTokenHash,
         ip: req.ip,
         userAgent: req.headers[ "user-agent" ]
@@ -106,7 +101,7 @@ export const login = async (req, res) => {
     const accessToken = jwt.sign({
         id: user._id,
         sessionId: session._id
-    }, config.JWT_SECRET,
+    }, ENV.JWT_SECRET,
         {
             expiresIn: "15m"
         }
@@ -132,6 +127,8 @@ export const login = async (req, res) => {
 // Get-me -- details of user
 
 export const getMe = async(req,res)=>{
+
+  try{
   const token = req.headers.authorization?.split(" ")[1];
 
   if(!token)
@@ -141,10 +138,22 @@ export const getMe = async(req,res)=>{
 
   const decoded =jwt.verify(token , ENV.JWT_SECRET);
   
-  const user = await usermodel.findById(decoded.id).select("-password")
+  const user = await usermodel.findById(decoded.id).select("-password");
 
-  res.status(200).json({message:"user fetched sucessfully",user:{username:user.username,email:user.email}})
+  if(!user){
+    return res.status(404).json({message:"User not found"});
 
+  }
+
+  res.status(200).json({message:"user fetched sucessfully",user:{username:user.username,email:user.email}
+  });
+  }
+
+  catch (error) {
+    return res.status(401).json({
+      message: "Invalid or expired token"
+    });
+  }
 }
 
 
@@ -174,7 +183,9 @@ export const refreshToken = async(req,res)=> {
     }
 
   const accessToken = jwt.sign(
-    {id:decoded.id},
+    {id:decoded.id,
+      sessionId:session._id
+    },
     ENV.JWT_SECRET,
     {expiresIn:"15m"});
 
@@ -207,7 +218,7 @@ export const refreshToken = async(req,res)=> {
     return res.status(400).json({message:"refresh token not found"})
   }
 
-  const refreshTokenHash = crypto.createHash("sha256").update(refreshtoken).digest("hex");
+  const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
 
 
   const session = await sessionModel.findOne({
@@ -222,7 +233,7 @@ export const refreshToken = async(req,res)=> {
    session.revoked = true;
   await session.save();
 
-  res.clearcookie("refreshToken");
+  res.clearCookie("refreshToken");
  
  res.status(200).json({
         message: "Logged out successfully"
@@ -234,9 +245,9 @@ export const refreshToken = async(req,res)=> {
 
 // logutall
 
-export const logoutall = async(res,req)=> {
+export const logoutall = async(req,res)=> {
 
-  const refreshToken = req.coojies.refreshToken;
+  const refreshToken = req.cookies.refreshToken;
 
 if (!refreshToken) {
         return res.status(400).json({
@@ -244,10 +255,10 @@ if (!refreshToken) {
         })
     }
  
-   const decoded = jwt.verify(refreshToken, config.JWT_SECRET);
+   const decoded = jwt.verify(refreshToken, ENV.JWT_SECRET);
 
     await sessionModel.updateMany({
-        user: decoded.id,
+        userId: decoded.id,
         revoked: false
     }, {
         revoked: true
