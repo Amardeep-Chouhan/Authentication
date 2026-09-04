@@ -19,6 +19,11 @@ const userSchema = new mongoose.Schema({
 
     }
 
+verified:{
+    type:Boolean,
+    default:false
+}
+
 })
 
 const usermodel = mongoose.model("site Users", userSchema);
