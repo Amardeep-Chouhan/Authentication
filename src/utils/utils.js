@@ -1,5 +1,7 @@
+import crypto from "crypto";
+
 export function generateOtp() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return crypto.randomInt(100000, 1000000).toString();
 }
 
 export function getOtpHtml(otp) {
@@ -37,6 +39,7 @@ export function getOtpHtml(otp) {
         <h2>Your OTP Code</h2>
         <p class="otp">${otp}</p>
         <p>Please use this code to verify your email address.</p>
+        <p>This OTP is valid for <strong>10 minutes</strong>.</p>
     </div>
 </body>
 </html>`;
