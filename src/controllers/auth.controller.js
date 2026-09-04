@@ -33,7 +33,8 @@ export const registerUser = async(req,res)=>{
     await otpModel.create({
         email,
         user: newUser._id,
-        otpHash
+        otpHash,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000)
     })
 
     await sendEmail(email, "OTP Verification", `Your OTP code is ${otp}`, html)
@@ -282,7 +283,8 @@ export async function verifyEmail(req, res) {
 
     const otpDoc = await otpModel.findOne({
         email,
-        otpHash
+        otpHash,
+        expiresAt: { $gt: new Date() }
     })
 
     if (!otpDoc) {
