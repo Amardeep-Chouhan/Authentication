@@ -3,6 +3,10 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import {ENV} from "../lib/env.js"
 import sessionModel from "../models/session.model.js";
+import { sendEmail } from "../services/email.service.js";
+import { generateOtp, getOtpHtml } from "../utils/utils.js";
+import otpModel from "../models/otp.model.js";
+// register
 
 export const registerUser = async(req,res)=>{
       const {username,email,password}=req.body;
@@ -20,41 +24,31 @@ export const registerUser = async(req,res)=>{
         email,
         password:hashedPassword
       });
+       
+
+    const otp = generateOtp();
+    const html = getOtpHtml(otp);
+
+    const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
+    await otpModel.create({
+        email,
+        user: newUser._id,
+        otpHash
+    })
+
+    await sendEmail(email, "OTP Verification", `Your OTP code is ${otp}`, html)
+ 
+      
 
 
-      const refreshToken = jwt.sign({id:newUser._id},ENV.JWT_SECRET,{expiresIn:"7d"});
-
-      const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
-
-      const session = await sessionModel.create({
-        userId:newUser.id,
-        refreshTokenHash,
-        ip:req.ip,
-        userAgent:req.headers["user-agent"]
-      })
-
-
-
-    const accessToken = jwt.sign(
-      {id:newUser._id,
-        sessionId:session._id
-      },
-      ENV.JWT_SECRET,
-      {expiresIn:"15m"});
-
-    
-
-   res.cookie("refreshToken",refreshToken,{
-    httpOnly:true,
-    secure:true,
-    sameSite:"strict",
-    maxAge:7*24*60*60*1000 
-   })
-
-
-    res.status(201).json({message:"User created Sucessfully",user:{username:newUser.username,email:newUser.email},accessToken
-    }
-    )
+    res.status(201).json({
+      message:"User created Sucessfully",
+      newUser:{
+        username:newUser.username,
+        email:newUser.email,
+        verified:newUser.verified
+      }
+    })
 }
 
 // login - login 
@@ -79,6 +73,12 @@ export const login = async (req, res) => {
         return res.status(401).json({
             message: "Invalid email or password"
         })
+    }
+    
+    if (!user.verified) {
+      return res.status(403).json({
+        message :"Please verify your email address before logging in"
+      })
     }
 
     const refreshToken = jwt.sign({
@@ -210,6 +210,8 @@ export const refreshToken = async(req,res)=> {
 
 }
 
+// logout
+
  export const logout = async(req,res)=>{ 
 
   const refreshToken = req.cookies.refreshToken;
@@ -272,3 +274,4 @@ res.clearCookie("refreshToken");
 
 
 }
+
